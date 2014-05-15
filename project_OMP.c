@@ -5,7 +5,6 @@
 #include <math.h>
 #include <time.h>
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +21,19 @@ void outOfMemory()
 	exit (0);
 }
 
+int writeOutput(int matchpos)
+{
+	FILE *f = fopen("result_OMP.txt", "a");
+	if(!f) {
+		puts("Unable to open output file... very bad.");
+		return -1;
+	}
+	fprintf(f, "%d %d %d\n", textNumber, patternNumber, matchpos);
+	fclose(f);
+	
+	return 0;
+}
+
 void readFromFile (FILE *f, char **data, int *length)
 {
 	int ch;
@@ -31,8 +43,6 @@ void readFromFile (FILE *f, char **data, int *length)
 
 	allocatedLength = 0;
 	result = NULL;
-
-	
 
 	ch = fgetc (f);
 	while (ch >= 0)
@@ -77,8 +87,8 @@ void hostMatch(int findAll) {
 	pos = -1;
 	lastI = textLength-patternLength;
 	
-	#pragma omp parallel private(i, j)  shared(pos) num_threads(8)
-	#pragma omp for schedule(static)
+	#pragma omp parallel private(i, j) shared(pos) num_threads(8)
+	#pragma omp for schedule(dynamic)
 	for(i=0; i <= lastI; i++) 
 	{
 		if (findAll == 1 || (pos == -1 || i<pos)) { 
@@ -91,9 +101,9 @@ void hostMatch(int findAll) {
 			if (j == patternLength) 
 			{
 				if(findAll)
-                                {
-                                	writeOutput(i);
-                                }
+                {
+                	writeOutput(i);
+                }
 				#pragma omp critical (posaccess)
 				{
 					if(pos == -1 || i<pos)
@@ -110,42 +120,28 @@ void hostMatch(int findAll) {
 	}
 }
 
-int writeOutput(int matchpos)
-{
-	FILE *f = fopen("result_OMP.txt", "a");
-	if(!f) {
-		puts("Unable to open output file... very bad.");
-		return -1;
-	}
-	fprintf(f, "%d %d %d\n", textNumber, patternNumber, matchpos);
-	fclose(f);
-	
-	return 0;
-}
-
 int main(int argc, char **argv)
 {
 	remove("result_OMP.txt"); // removing previous output
 
-	// I'm going to read the control file right from main because YOLO (might be faster?)
-	char line[10];
-        int all;
+    int all;
 
-        FILE *f;
-        char *fname = "inputs/control.txt";
-        f = fopen(fname, "r");
-        
-        if(!f) {
-                puts("Couldn't open control file...");
-                return 0;
-        }
+    FILE *f;
+    char *fname = "inputs/control.txt";
+    f = fopen(fname, "r");
+    
+    if(!f) {
+            puts("Couldn't open control file...");
+            return 0;
+    }
 
-        while(fscanf(f, "%d %d %d", &all, &textNumber, &patternNumber) == 3) {
-                readData();
-		if(patternLength > textLength)
-           		writeOutput(-1);
-   	   	else
-                	hostMatch(all);
+    while(fscanf(f, "%d %d %d", &all, &textNumber, &patternNumber) == 3) {
+            readData();
+	if(patternLength > textLength)
+       		writeOutput(-1);
+	   	else
+            	hostMatch(all);
 
-        }
+    }
+    fclose(f);
 }
