@@ -14,10 +14,31 @@
 char *textData;
 int textLength, textNumber;
 
+long LARGEST_INPUT_SIZE = 20000000;
+
 char *patternData;
 int patternLength, patternNumber;
 
 FILE* outfiles[8];
+
+typedef struct
+{
+	char * text;
+	int length;
+
+} dataFile;
+
+typedef struct
+{
+	int searchMode;
+	int textNumber;
+	int patternNumber;
+} controlFileLine;
+
+dataFile *texts;
+dataFile *patterns;
+controlFile *tests;
+
 
 void outOfMemory()
 {
@@ -63,6 +84,35 @@ int readData ()
 		return 0;
 	readFromFile (f, &textData, &textLength);
 	fclose (f);
+	sprintf (fileName, "inputs/pattern%d.txt", patternNumber);
+	f = fopen (fileName, "r");
+	if (f == NULL)
+		return 0;
+	readFromFile (f, &patternData, &patternLength);
+	fclose (f);
+
+	return 1;
+}
+
+int ReadTextData (int textNumber)
+{
+	FILE *f;
+	char fileName[1000];
+	sprintf (fileName, "inputs/text%d.txt", textNumber);
+	f = fopen (fileName, "r");
+	if (f == NULL)
+		return 0;
+	readFromFile (f, &textData, &textLength);
+	fclose (f);
+
+	return 1;
+}
+
+
+int ReadPatternData (int patternNumber)
+{
+	FILE *f;
+	char fileName[1000];
 	sprintf (fileName, "inputs/pattern%d.txt", patternNumber);
 	f = fopen (fileName, "r");
 	if (f == NULL)
@@ -156,10 +206,11 @@ int main(int argc, char **argv)
 	int i = 0;
 	char ofname[17];
 
+	
+
 	while(i < 8)
 	{
 		sprintf(ofname, "result_OMP_%d.txt", i);
-		remove(ofname);
 		outfiles[i] = fopen(ofname, "a");
 		if(!outfiles[i])
 		{
@@ -178,16 +229,59 @@ int main(int argc, char **argv)
             return -1;
     }
 
-    while(fscanf(f, "%d %d %d", &all, &textNumber, &patternNumber) == 3) {
-        readData();
+    //£
+    texts = (dataFile
 
+
+    int seenTexts [20];
+    int seenPatterns [20];
+    int iterateTemp = 0;
+
+    while(iterateTemp < 21)
+    {
+    	seenTexts[iterateTemp] = 0;
+    	seenPatterns[iterateTemp] = 0;
+    }
+
+    int controlCounter = 0;
+    controlFileLine temp;
+    while(fscanf(f, "%d %d %d", &(temp.searchMode), &(temp.textNumber), &(temp.patternNumber) == 3) // Populate tests array with data for each test
+     {
+       
+     	tests[controlCounter] = temp;
+     	seenTexts[temp.textNumber] = 1;
+     	seenPatterns[temp.patternNumber] = 1;
+     	++controlCounter;
+    }
+
+    #pragma omp parallel for schedule(static)
+    for(int i=0; i<20; ++i)
+    {
+    	if(seenTexts[i])
+    		ReadTextData(i);
+
+    	if(seenPatterns[i])
+    		ReadPatternData(i);
+
+    }
+
+    #pragma omp parallel for schedule(static)
+    for(int i=0; i<20; ++i)
+    {
+    	if(seenTexts[i])
+    		ReadTextData(i);
+
+    }
+
+    //iterate work
+    /*
 		if(patternLength > textLength)
        		fprintf(outfiles[0], "%d %d -1\n", textNumber, patternNumber);
 	   	else if (all)
         	hostMatchAll();
         else 
         	hostMatchLeft();
-    }
+        */
 
     i=0;
     while(i < 8)
