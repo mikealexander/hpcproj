@@ -5,6 +5,7 @@
 #include <math.h>
 #include <time.h>
 #include <omp.h>
+#include <limits.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
@@ -16,7 +17,7 @@ int textLength, textNumber;
 char *patternData;
 int patternLength, patternNumber;
 
-FILE* outfiles[20];
+FILE* outfiles[8];
 
 void outOfMemory()
 {
@@ -72,34 +73,64 @@ int readData ()
 	return 1;
 }
 		
-int hostMatch(int findAll)
+void hostMatchAll()
 {
-	int pos, i, j, lastI;
-	
-	#pragma omp parallel private(i, j) shared(pos, outfiles) num_threads(8)
+	long pos, i, j, lastI;
+	pos = LONG_MAX;
+	lastI = textLength-patternLength+1;
+
+	#pragma omp parallel private(i, j) shared(pos) num_threads(8)
 	{
-		pos = -1;
-		lastI = textLength-patternLength;
-		j = 0;
 		i = omp_get_thread_num();
-		while(i < lastI && (findAll || pos == -1 || i<pos))
+		j = 0;
+
+		while(i < lastI)
 		{
 			while(j<patternLength && textData[i+j] == patternData[j])
 			{
 				j++;
 			}
 
-			if (j == patternLength && findAll)
+			if (j == patternLength)
 			{
-				puts("Findall Match");
-				fprintf(outfiles[omp_get_thread_num()], "%d %d %d\n", textNumber, patternNumber, i);
+				pos = i;
+				fprintf(outfiles[omp_get_thread_num()], "%d %d %ld\n", textNumber, patternNumber, i);
 			}
-			else if (j == patternLength)
+
+			j = 0;
+			i += 8;
+		}
+	}
+
+	if(pos == LONG_MAX) 
+	{
+		fprintf(outfiles[0], "%d %d %d\n", textNumber, patternNumber, -1);
+	}
+}
+
+void hostMatchLeft()
+{
+	long pos, i, j, lastI;
+	pos = LONG_MAX;
+	lastI = textLength-patternLength+1;
+
+	#pragma omp parallel private(i, j) shared(pos) num_threads(8)
+	{
+		i = omp_get_thread_num();
+
+		while(i < lastI && i < pos)
+		{
+			j = 0;
+			while(j<patternLength && textData[i+j] == patternData[j])
+			{
+				j++;
+			}
+
+			if (j == patternLength)
 			{
 				#pragma omp critical (posaccess)
 				{
-					puts("Leftmost match");
-					if (pos == -1 || i < pos)
+					if (i < pos)
 						pos = i;
 				}
 			}
@@ -107,8 +138,13 @@ int hostMatch(int findAll)
 		}
 	}
 
-	if(!findAll || (findAll && pos == -1)) {
-		fprintf(outfiles[omp_get_thread_num()], "%d %d %d\n", textNumber, patternNumber, pos);
+	if (pos == LONG_MAX)
+	{
+		fprintf(outfiles[0], "%d %d %d\n", textNumber, patternNumber, -1);
+	}
+	else
+	{
+		fprintf(outfiles[0], "%d %d %ld\n", textNumber, patternNumber, pos);
 	}
 }
 
@@ -118,21 +154,18 @@ int main(int argc, char **argv)
 
 	int all;
 	int i = 0;
-	char ofname[20];
-
+	char ofname[17];
 
 	while(i < 8)
 	{
 		sprintf(ofname, "result_OMP_%d.txt", i);
 		remove(ofname);
-
-		outfiles[i] = fopen(ofname, "w+");
+		outfiles[i] = fopen(ofname, "a");
 		if(!outfiles[i])
 		{
 			printf("Couldn't open an output file for thread %d. Exiting...\n", i);
 			return -1;
 		}
-
 		i++;
 	}
 
@@ -142,19 +175,31 @@ int main(int argc, char **argv)
     
     if(!f) {
             puts("Couldn't open control file...");
-            return 0;
+            return -1;
     }
 
     while(fscanf(f, "%d %d %d", &all, &textNumber, &patternNumber) == 3) {
-            readData();
-	if(patternLength > textLength)
+        readData();
+
+		if(patternLength > textLength)
        		fprintf(outfiles[0], "%d %d -1\n", textNumber, patternNumber);
-	   	else
-        	hostMatch(all);
+	   	else if (all)
+        	hostMatchAll();
+        else 
+        	hostMatchLeft();
     }
 
-
-    system("cat result_OMP_* > result_OMP.txt");
+    i=0;
+    while(i < 8)
+    {
+    	fclose(outfiles[i]);
+    	i++;
+    }
+    
+    if(!system("cat result_OMP_* > result_OMP.txt"))
+    {
+    	// shiieeeet
+    }
 
     fclose(f);
 }
