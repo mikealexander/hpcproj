@@ -188,6 +188,11 @@ int main(int argc, char **argv)
         else 
         	hostMatchLeft();
     }
+    
+    if(!system("cat result_OMP_*.txt > result_OMP.txt"))
+    {
+    	// shiieeeet
+    }
 
     i=0;
     while(i < 8)
@@ -196,11 +201,6 @@ int main(int argc, char **argv)
     	fclose(outfiles[i]);
     	remove(ofname);
     	i++;
-    }
-    
-    if(!system("cat result_OMP_* > result_OMP.txt"))
-    {
-    	// shiieeeet
     }
 
     fclose(f);
