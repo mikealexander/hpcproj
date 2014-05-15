@@ -192,7 +192,9 @@ int main(int argc, char **argv)
     i=0;
     while(i < 8)
     {
+    	sprintf(ofname, "result_OMP_%d.txt", i);
     	fclose(outfiles[i]);
+    	remove(ofname);
     	i++;
     }
     
