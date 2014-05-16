@@ -20,7 +20,7 @@ int patternLength, patternNumber;
 int start, num, all;
 long localResult = LONG_MAX;
 
-FILE *threadFile, *mainFile;
+FILE *threadFile;
 
 void outOfMemory()
 {
@@ -123,21 +123,14 @@ void hostMatchAll()
 		}
 		if(j==patternLength)
 		{
-			//printf("Found one at %ld \n", i);
-			r=i;
+			localResult = i;
 			fprintf(threadFile, "%d %d %ld\n", textNumber, patternNumber, i);
 		}
 
 		j=0;
 		i+=num;
 	}
-
-	if(r == LONG_MAX)
-	{
-		fprintf(threadFile, "%d %d %d\n", textNumber, patternNumber, -1);
-	}
 }
-
 
 int main(int argc, char **argv)
 {
@@ -149,15 +142,14 @@ int main(int argc, char **argv)
     start = rank;
     num = npes;
 
-	remove("result_MPI.txt"); // removing previous output
+    if (rank == 0)
+    {
+		remove("result_MPI.txt"); // removing previous output
+	}
 
 	char filename[18];
 	sprintf(filename, "result_MPI_%d.txt", rank);
 	threadFile = fopen(filename, "a");
-
-	if (rank == 0)
-		mainFile = fopen("result_MPI.txt", "a");
-
 
     FILE *f;
     char *fname = "inputs/control.txt";
@@ -178,19 +170,20 @@ int main(int argc, char **argv)
     		hostMatchLeft();
     	}
 
+
 		long globalResult;
+    	
 		MPI_Reduce(&localResult, &globalResult, 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
 
 		if (rank == 0)
 		{
-
 			if (globalResult == LONG_MAX)
 			{
-				fprintf(mainFile, "%d %d %d\n", textNumber, patternNumber, -1);
+				fprintf(threadFile, "%d %d %d\n", textNumber, patternNumber, -1);
 			}
-			else
+			else if (!all)
 			{
-				fprintf(mainFile, "%d %d %ld\n", textNumber, patternNumber, globalResult);
+				fprintf(threadFile, "%d %d %ld\n", textNumber, patternNumber, globalResult);
 			}
 		}
     	
@@ -201,15 +194,14 @@ int main(int argc, char **argv)
 	fclose(f);
 	fclose(threadFile);
 	
-	
 	if(rank == 0)
 	{
-		if(!system("cat result_MPI_* > result_MPI.txt"))
+		if(!system("cat result_MPI_*.txt > result_MPI.txt"))
 		{
 			// things
 		}
-		fclose(mainFile);
 	}
+	MPI_Barrier(MPI_COMM_WORLD);
 
 	remove(filename);
 
