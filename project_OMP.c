@@ -8,37 +8,30 @@
 #include <limits.h>
 
 ////////////////////////////////////////////////////////////////////////////////
-// Program main
+// OMP Implementation of Sequential Search by Michael Alexander 2014
 ////////////////////////////////////////////////////////////////////////////////
-
-char *textData;
-int textLength, textNumber;
-
-long LARGEST_INPUT_SIZE = 20000000;
-
-char *patternData;
-int patternLength, patternNumber;
 
 FILE* outfiles[8];
 
 typedef struct
 {
-	char * text;
-	int length;
-
-} dataFile;
+	int searchType;
+	int textNumber;
+	int patternNumber;
+} test;
 
 typedef struct
 {
-	int searchMode;
-	int textNumber;
-	int patternNumber;
-} controlFileLine;
+	int length;
+	char *data;
+} dataItem;
 
-dataFile *texts;
-dataFile *patterns;
-controlFile *tests;
+test tests[200];
+dataItem *patterns[20];
+dataItem *texts[20];
 
+int seenPatterns[20];
+int seenTexts[20];
 
 void outOfMemory()
 {
@@ -74,8 +67,11 @@ void readFromFile (FILE *f, char **data, int *length)
 	*length = resultLength;
 }
 
-int readData ()
+int readText (int textNumber)
 {
+	char *textData;
+	int textLength;
+
 	FILE *f;
 	char fileName[1000];
 	sprintf (fileName, "inputs/text%d.txt", textNumber);
@@ -84,33 +80,21 @@ int readData ()
 		return 0;
 	readFromFile (f, &textData, &textLength);
 	fclose (f);
-	sprintf (fileName, "inputs/pattern%d.txt", patternNumber);
-	f = fopen (fileName, "r");
-	if (f == NULL)
-		return 0;
-	readFromFile (f, &patternData, &patternLength);
-	fclose (f);
+	dataItem textItem;
+	textItem.data = textData;
+	textItem.length = textLength;
+
+	texts[textNumber] = malloc(sizeof(textItem));
+	(*texts[textNumber]) = textItem;
 
 	return 1;
 }
 
-int ReadTextData (int textNumber)
+int readPattern (int patternNumber)
 {
-	FILE *f;
-	char fileName[1000];
-	sprintf (fileName, "inputs/text%d.txt", textNumber);
-	f = fopen (fileName, "r");
-	if (f == NULL)
-		return 0;
-	readFromFile (f, &textData, &textLength);
-	fclose (f);
+	char *patternData;
+	int patternLength;
 
-	return 1;
-}
-
-
-int ReadPatternData (int patternNumber)
-{
 	FILE *f;
 	char fileName[1000];
 	sprintf (fileName, "inputs/pattern%d.txt", patternNumber);
@@ -119,15 +103,22 @@ int ReadPatternData (int patternNumber)
 		return 0;
 	readFromFile (f, &patternData, &patternLength);
 	fclose (f);
+	dataItem patternItem;
+	patternItem.data = patternData;
+	patternItem.length = patternLength;
+
+	patterns[patternNumber] = malloc(sizeof(patternItem));
+	(*patterns[patternNumber]) = patternItem;
 
 	return 1;
 }
+
 		
-void hostMatchAll()
+void hostMatchAll(int textNumber, int patternNumber)
 {
 	long pos, i, j, lastI;
 	pos = LONG_MAX;
-	lastI = textLength-patternLength+1;
+	lastI = (*texts[textNumber]).length-(*patterns[patternNumber]).length + 1;
 
 	#pragma omp parallel private(i, j) shared(pos) num_threads(8)
 	{
@@ -136,12 +127,12 @@ void hostMatchAll()
 
 		while(i < lastI)
 		{
-			while(j<patternLength && textData[i+j] == patternData[j])
+			while(j<(*patterns[patternNumber]).length && (*texts[textNumber]).data[i+j] == (*patterns[patternNumber]).data[j])
 			{
 				j++;
 			}
 
-			if (j == patternLength)
+			if (j == (*patterns[patternNumber]).length)
 			{
 				pos = i;
 				fprintf(outfiles[omp_get_thread_num()], "%d %d %ld\n", textNumber, patternNumber, i);
@@ -158,11 +149,11 @@ void hostMatchAll()
 	}
 }
 
-void hostMatchLeft()
+void hostMatchLeft(int textNumber, int patternNumber)
 {
 	long pos, i, j, lastI;
 	pos = LONG_MAX;
-	lastI = textLength-patternLength+1;
+	lastI = (*texts[textNumber]).length-(*patterns[patternNumber]).length+1;
 
 	#pragma omp parallel private(i, j) shared(pos) num_threads(8)
 	{
@@ -171,12 +162,12 @@ void hostMatchLeft()
 		while(i < lastI && i < pos)
 		{
 			j = 0;
-			while(j<patternLength && textData[i+j] == patternData[j])
+			while(j<(*patterns[patternNumber]).length && (*texts[textNumber]).data[i+j] == (*patterns[patternNumber]).data[j])
 			{
 				j++;
 			}
 
-			if (j == patternLength)
+			if (j == (*patterns[patternNumber]).length)
 			{
 				#pragma omp critical (posaccess)
 				{
@@ -200,17 +191,25 @@ void hostMatchLeft()
 
 int main(int argc, char **argv)
 {
+	int all;
+	char ofname[17];
 	remove("result_OMP.txt"); // removing previous output
 
-	int all;
-	int i = 0;
-	char ofname[17];
+	// initialise all the seen patterns and texts to 0
+	int i;
+	for(i=0; i<20; i++)
+	{
+		seenTexts[i] = 0;
+		seenPatterns[i] = 0;
+	}
 
-	
-
+	// open all the file pointers for output
+	i=0;
 	while(i < 8)
 	{
 		sprintf(ofname, "result_OMP_%d.txt", i);
+		remove(ofname);
+
 		outfiles[i] = fopen(ofname, "a");
 		if(!outfiles[i])
 		{
@@ -229,79 +228,53 @@ int main(int argc, char **argv)
             return -1;
     }
 
-    //£
-    texts = (dataFile
+    int testCounter = 0;
+    int o, t, p;
+    while(fscanf(f, "%d %d %d", &o, &t, &p) == 3) {
+        tests[testCounter].searchType = o;
+        tests[testCounter].textNumber = t;
+        tests[testCounter].patternNumber = p;
 
-
-    int seenTexts [20];
-    int seenPatterns [20];
-    int iterateTemp = 0;
-
-    while(iterateTemp < 21)
-    {
-    	seenTexts[iterateTemp] = 0;
-    	seenPatterns[iterateTemp] = 0;
+        seenTexts[t] = 1;
+        seenPatterns[p] = 1;
+        testCounter++;
     }
 
-    int controlCounter = 0;
-    controlFileLine temp;
-    while(fscanf(f, "%d %d %d", &(temp.searchMode), &(temp.textNumber), &(temp.patternNumber) == 3) // Populate tests array with data for each test
-     {
-       
-     	tests[controlCounter] = temp;
-     	seenTexts[temp.textNumber] = 1;
-     	seenPatterns[temp.patternNumber] = 1;
-     	++controlCounter;
-    }
+    fclose(f);
 
-    #pragma omp parallel for schedule(static)
-    for(int i=0; i<20; ++i)
-    {
-    	if(seenTexts[i])
-    		ReadTextData(i);
+    // read in the patterns and texts we need in parallel
+	#pragma omp parallel for schedule(static) private(i) num_threads(8)
+	for(i=0; i<20; i++)
+	{
+		if (seenPatterns[i])
+			readPattern(i);
+		if (seenTexts[i])
+			readText(i);
+	}
 
-    	if(seenPatterns[i])
-    		ReadPatternData(i);
+	// time to do the tests!
+	i=0;
+	while(i<testCounter)
+	{
+		if((*patterns[tests[i].patternNumber]).length > (*texts[tests[i].textNumber]).length)
+			fprintf(outfiles[0], "%d %d -1\n", tests[i].textNumber, tests[i].patternNumber);
+		else if (tests[i].searchType)
+			hostMatchAll(tests[i].textNumber, tests[i].patternNumber);
+		else
+			hostMatchLeft(tests[i].textNumber, tests[i].patternNumber);
 
-    }
+		i++;
+	}
 
-    #pragma omp parallel for schedule(static)
-    for(int i=0; i<20; ++i)
-    {
-    	if(seenTexts[i])
-    		ReadTextData(i);
-
-    }
-
-    //iterate work
-    /*
-		if(patternLength > textLength)
-       		fprintf(outfiles[0], "%d %d -1\n", textNumber, patternNumber);
-	   	else if (all)
-        	hostMatchAll();
-        else 
-        	hostMatchLeft();
-        */
-
+	// close all the file pointers
     i=0;
     while(i < 8)
     {
     	fclose(outfiles[i]);
+    	//sprintf(ofname, "result_OMP_%d.txt", i);
+		//remove(ofname);
     	i++;
     }
-    
-    if(!system("cat result_OMP_* > result_OMP.txt"))
-    {
-    	// shiieeee
-    }
-
-    i=0;
-    while(i<8)
-    {
-    	sprintf(ofname, "result_OMP_%d.txt", i);
-    	remove(ofname);
-    	i++;
-    }
-
-    fclose(f);
+	// concatinate all the results into the results file
+    return system("cat result_OMP_* > result_OMP.txt");
 }
