@@ -11,8 +11,6 @@
 // OMP Implementation of Sequential Search by Michael Alexander 2014
 ////////////////////////////////////////////////////////////////////////////////
 
-FILE* outfiles[8];
-
 typedef struct
 {
 	int searchType;
@@ -26,7 +24,8 @@ typedef struct
 	char *data;
 } dataItem;
 
-test tests[200];
+FILE* outfiles[8];
+test tests[400]; // I really hope there isn't more than 400 tests...
 dataItem *patterns[20];
 dataItem *texts[20];
 
@@ -271,10 +270,18 @@ int main(int argc, char **argv)
     while(i < 8)
     {
     	fclose(outfiles[i]);
-    	//sprintf(ofname, "result_OMP_%d.txt", i);
-		//remove(ofname);
     	i++;
     }
+
 	// concatinate all the results into the results file
-    return system("cat result_OMP_* > result_OMP.txt");
+    int r = system("cat result_OMP_* > result_OMP.txt");
+
+    // delete all temp files
+    i=0;
+    while(i < 8)
+    {
+    	sprintf(ofname, "result_OMP_%d.txt", i);
+		remove(ofname);
+    	i++;
+    }
 }
