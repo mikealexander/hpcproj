@@ -1,0 +1,6 @@
+put openmp project file here (project_OMP.c)
+run ./execute_OMP_gcc or ./execute_OMP_icc
+will run for varied set of inputs
+will output diff if unsuccessful
+
+#andrew

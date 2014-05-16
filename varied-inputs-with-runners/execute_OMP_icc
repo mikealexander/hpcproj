@@ -1,0 +1,10 @@
+icc -openmp -O2 -o project_OMP project_OMP.c
+time ./project_OMP
+sort -k 1,1n -k 2,2n -k 3,3n result_OMP.txt > result_OMP.txt.sorted
+sort -k 1,1n -k 2,2n -k 3,3n expected_results > expected_results.sorted
+if cmp -s expected_results.sorted result_OMP.txt.sorted; then
+    echo "success"
+else
+    echo "failure :(, diff results below"
+    diff expected_results.sorted result_OMP.txt.sorted
+fi

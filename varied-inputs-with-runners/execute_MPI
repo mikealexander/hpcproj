@@ -1,0 +1,10 @@
+mpicc -O2 -o project_MPI project_MPI.c
+time ./project_MPI
+sort -k 1,1n -k 2,2n -k 3,3n result_MPI.txt > result_MPI.txt.sorted
+sort -k 1,1n -k 2,2n -k 3,3n expected_results > expected_results.sorted
+if cmp -s expected_results.sorted result_MPI.txt.sorted; then
+    echo "success"
+else
+    echo "failure :(, diff results below"
+    diff expected_results.sorted result_MPI.txt.sorted
+fi
