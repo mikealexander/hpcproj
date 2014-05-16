@@ -243,12 +243,18 @@ int main(int argc, char **argv)
 
     // read in the patterns and texts we need in parallel
 	#pragma omp parallel for schedule(static) private(i) num_threads(8)
-	for(i=0; i<20; i++)
+	for(i=0; i<40; i++)
 	{
-		if (seenPatterns[i])
-			readPattern(i);
-		if (seenTexts[i])
-			readText(i);
+		if (i < 20)
+		{
+			if (seenPatterns[i])
+				readPattern(i);
+		}
+		else
+		{
+			if (seenTexts[i-20])
+				readText(i-20);
+		}
 	}
 
 	// time to do the tests!

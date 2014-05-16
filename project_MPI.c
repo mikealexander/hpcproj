@@ -5,6 +5,7 @@
 #include <math.h>
 #include <time.h>
 #include <mpi.h>
+#include <limits.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
@@ -16,33 +17,15 @@ int textLength, textNumber;
 char *patternData;
 int patternLength, patternNumber;
 
-int startpos, endpos, numTests, testNum, all;
+int start, num, all;
+long localResult = LONG_MAX;
 
-struct Control {
-	int textNumber;
-	int patternNumber;
-	int all;
-};
-
-struct Control controls[20];
+FILE *threadFile, *mainFile;
 
 void outOfMemory()
 {
 	fprintf (stderr, "Out of memory\n");
 	exit (0);
-}
-
-int writeOutput(int matchpos)
-{
-	FILE *f = fopen("result_MPI.txt", "a");
-	if(!f) {
-		puts("Unable to open output file... very bad.");
-		return -1;
-	}
-	fprintf(f, "%d %d %d\n", textNumber, patternNumber, matchpos);
-	fclose(f);
-	
-	return 0;
 }
 
 void readFromFile (FILE *f, char **data, int *length)
@@ -94,14 +77,14 @@ int readData ()
 }
 
 
-int hostMatch()
+void hostMatchLeft()
 {
-	int i,j,k, lastI;
+	long i,j,k, lastI;
 	
-	i=startpos;
+	i=start;
 	j=0;
-	k=startpos;
-	lastI = endpos-patternLength+1;
+	k=start;
+	lastI = textLength-patternLength+1;
 
 	while (i<=lastI && j<patternLength)
 	{
@@ -112,141 +95,123 @@ int hostMatch()
 		}
 		else
 		{
-			i++;
+			i+=num;
 			k=i;
 			j=0;
 		}
 	}
 	if (j == patternLength)
 	{
-		printf("found a at %d\n", i);
-		return i;
+		localResult = i;
 	}
-	else
-		return textLength+1;
 }
 
-int hostMatchAll()
+void hostMatchAll()
 {
-	int foundFlag = -1;
+	long i,j, lastI;
+	long r = LONG_MAX;
 
-	int i,j,k, lastI;
-	
-	i=startpos;
+	i=start;
 	j=0;
-	k=startpos;
-	lastI = endpos-patternLength+1;
+	lastI = textLength-patternLength+1;
 
 	while (i<=lastI)
 	{
-		if(j==patternLength)
+		while(j<patternLength && textData[i+j] == patternData[j])
 		{
-			foundFlag = 1;
-			printf("Found one at %d\n", i);
-			writeOutput(i);
-			i++;
-			k=i;
-			j=0;
-		}
-		else if (textData[k] == patternData[j])
-		{
-
-			k++;
 			j++;
 		}
-		else
+		if(j==patternLength)
 		{
-			i++;
-			k=i;
-			j=0;
+			//printf("Found one at %ld \n", i);
+			r=i;
+			fprintf(threadFile, "%d %d %ld\n", textNumber, patternNumber, i);
 		}
+
+		j=0;
+		i+=num;
 	}
 
-	return foundFlag;
+	if(r == LONG_MAX)
+	{
+		fprintf(threadFile, "%d %d %d\n", textNumber, patternNumber, -1);
+	}
 }
 
 
 int main(int argc, char **argv)
 {
-	remove("result_MPI.txt"); // removing previous output
-
-	int npes, rank, result, globalresult;
-
+	int rank, npes;
 	MPI_Init(&argc, &argv);	
     MPI_Comm_size(MPI_COMM_WORLD, &npes);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	int tN, pN, a;
+    start = rank;
+    num = npes;
+
+	remove("result_MPI.txt"); // removing previous output
+
+	char filename[18];
+	sprintf(filename, "result_MPI_%d.txt", rank);
+	threadFile = fopen(filename, "a");
+
+	if (rank == 0)
+		mainFile = fopen("result_MPI.txt", "a");
+
 
     FILE *f;
     char *fname = "inputs/control.txt";
     f = fopen(fname, "r");
-    
-    if(!f) {
-    	puts("Couldn't open control file...");
-        return 0;
-    }
 
-	numTests = 0;
-    while(fscanf(f, "%d %d %d", &a, &tN, &pN) == 3) {
-    	controls[numTests].textNumber = tN;
-    	controls[numTests].patternNumber = pN;
-    	controls[numTests].all = a;
-    	numTests++;
+    while(fscanf(f, "%d %d %d", &all, &textNumber, &patternNumber) == 3) 
+    {
+    	// read pattern and text (all threads)
+    	readData();
+
+    	// perform search
+    	if (all)
+    	{
+    		hostMatchAll();
+    	}
+    	else
+    	{
+    		hostMatchLeft();
+    	}
+
+		long globalResult;
+		MPI_Reduce(&localResult, &globalResult, 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+
+		if (rank == 0)
+		{
+
+			if (globalResult == LONG_MAX)
+			{
+				fprintf(mainFile, "%d %d %d\n", textNumber, patternNumber, -1);
+			}
+			else
+			{
+				fprintf(mainFile, "%d %d %ld\n", textNumber, patternNumber, globalResult);
+			}
+		}
+    	
+    	MPI_Barrier(MPI_COMM_WORLD);
+    	localResult = LONG_MAX;
 	}
 
 	fclose(f);
-	MPI_Barrier(MPI_COMM_WORLD);
-
-	testNum = 0;	
-    while(testNum < numTests)
-    {
-    	textNumber = controls[testNum].textNumber;
-    	patternNumber = controls[testNum].patternNumber;
-    	all = controls[testNum].all;
-
-		readData();
-
-		startpos = rank * (textLength/npes);
-		endpos = startpos + (textLength/npes);
-
-		if(rank < npes - 1)
+	fclose(threadFile);
+	
+	
+	if(rank == 0)
+	{
+		if(!system("cat result_MPI_* > result_MPI.txt"))
 		{
-			endpos += patternLength-2;
+			// things
 		}
-		else
-		{
-			endpos += textLength%npes;
-		}
+		fclose(mainFile);
+	}
 
-		if(all == 0)
-		{
-			result = hostMatch();
-			MPI_Reduce(&result, &globalresult, 1, MPI_INT, MPI_MIN, 0, MPI_COMM_WORLD);
-
-			if(rank == 0)
-			{
-				if (globalresult == textLength+1)
-					globalresult = -1;
-
-				writeOutput(globalresult);
-			}
-		}
-		else
-		{
-			result = hostMatchAll();
-			MPI_Reduce(&result, &globalresult, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-
-			if (rank == 0)
-			{
-				if (globalresult == -1)
-					writeOutput(-1);
-			}
-		}
-
-		MPI_Barrier(MPI_COMM_WORLD);
-		testNum++;
-    }
+	remove(filename);
 
 	MPI_Finalize();
 }
