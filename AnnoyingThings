@@ -1,0 +1,13 @@
+Annoying Things
+
+----
+API
+-----
+On GET wall, comments are not included in the posts
+On a number of calls, groovy class metadata is included
+Some types come back wrapped in strings
+CSRF cookie & body param insisted upon by API even though there is no longer a web consumer of the API
+ 
+-----
+Other
+-----
